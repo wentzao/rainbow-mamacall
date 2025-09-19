@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>語音廣播系統</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+
+        /* 導航欄樣式 */
+        .navbar {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 0 20px;
+            z-index: 100;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar-brand {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .user-profile {
+            position: relative;
+        }
+
+        .profile-image {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #4CAF50;
+            transition: border-color 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .profile-image:hover {
+            border-color: #45a049;
+        }
+
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 50px;
+            right: 0;
+            background-color: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-radius: 4px;
+            padding: 8px 0;
+            min-width: 150px;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+        }
+
+        .dropdown-item {
+            padding: 8px 16px;
+            color: #333;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .dropdown-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        /* 修改主要內容區域，為導航欄留出空間 */
+        .main-content {
+            max-width: 800px;
+            margin: 80px auto 20px;
+            padding: 0 20px;
+        }
+
+        /* 在移動設備上隱藏導航欄 */
+        @media (max-width: 768px) {
+            .navbar {
+                display: none !important;
+            }
+            .main-content {
+                margin-top: 20px;
+            }
+        }
+
+        /* LINE 登入覆蓋層 */
+        .line-login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgb(255, 255, 255);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1001;
+        }
+
+        .line-login-button {
+            padding: 20px 40px;
+            font-size: 1.2em;
+            background-color: #00B900;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .line-login-button:hover {
+            background-color: #009900;
+        }
+
+        /* 原有的覆蓋層樣式 */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            display: none;
+        }
+
+        .connect-button {
+            padding: 20px 40px;
+            font-size: 1.2em;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .connect-button:hover {
+            background-color: #45a049;
+        }
+
+        /* 原有樣式保持不變 */
+        .clock {
+            font-size: 4em;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+            color: #333;
+            font-family: 'Digital', Arial, sans-serif;
+        }
+
+        .controls {
+            display: none;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        select {
+            padding: 10px;
+            font-size: 16px;
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .message-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            animation: slideIn 0.3s ease-out;
+            opacity: 1;
+            transform: translateX(0);
+            transition: all 0.2s ease-out;
+            font-size: var(--card-font-size, 16px);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .message-card.removing {
+            transform: translateX(-20px);
+            opacity: 0;
+        }
+
+        .message-content {
+            flex-grow: 1;
+            margin-right: 15px;
+        }
+
+        .message-time {
+            font-size: calc(var(--card-font-size, 16px) * 0.8);
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .message-text {
+            font-size: calc(var(--card-font-size, 16px) * 1.2);
+            line-height: 1.4;
+            color: #333;
+        }
+
+        .delete-btn {
+            background: #ff4444;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .delete-btn:hover {
+            background: #cc0000;
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(-20px); }
+        }
+
+        .font-size-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-right: 20px;
+        }
+
+        .font-size-btn {
+            width: 36px;
+            height: 36px;
+            border: none;
+            border-radius: 50%;
+            background-color: #4CAF50;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+
+        .font-size-btn:hover {
+            background-color: #45a049;
+        }
+
+        .font-size-display {
+            font-size: 16px;
+            color: #333;
+            min-width: 40px;
+            text-align: center;
+        }
+
+        /* 設置 Modal 樣式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+        }
+
+        .modal-content {
+            position: relative;
+            background-color: #fff;
+            padding: 20px;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .close-modal {
+            font-size: 1.5em;
+            color: #666;
+            cursor: pointer;
+            border: none;
+            background: none;
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .settings-group {
+            margin-bottom: 15px;
+        }
+
+        .settings-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+        }
+
+        .settings-group select {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .voice-test {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+
+        .voice-test textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .voice-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .voice-btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            transition: background-color 0.2s;
+        }
+
+        .voice-btn:hover {
+            background-color: #45a049;
+        }
+
+        .voice-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .save-settings {
+            padding: 8px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .save-settings:hover {
+            background-color: #45a049;
+        }
+
+        .rate-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .rate-control input[type="range"] {
+            flex: 1;
+        }
+
+        .rate-value {
+            min-width: 40px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <!-- 設置 Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">語音設置</div>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-group">
+                    <label>中文語音</label>
+                    <select id="chineseVoiceSelect"></select>
+                </div>
+                <div class="settings-group">
+                    <label>英文語音</label>
+                    <select id="englishVoiceSelect"></select>
+                </div>
+                <div class="settings-group">
+                    <label>語速調整 (<span id="rateValue">1</span>x)</label>
+                    <div class="rate-control">
+                        <input type="range" id="rateRange" min="0.5" max="2" step="0.1" value="1">
+                    </div>
+                </div>
+                <div class="voice-test">
+                    <label>語音測試</label>
+                    <textarea id="testText" placeholder="輸入測試文字">Sun 1 Austin 王士軒 Sun 1 Austin 王士軒 請準備</textarea>
+                    <div class="voice-controls">
+                        <button id="playTest" class="voice-btn">播放</button>
+                        <button id="pauseTest" class="voice-btn" disabled>暫停</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-settings">儲存設置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 導航欄 -->
+    <nav class="navbar">
+        <div class="navbar-brand">語音廣播系統</div>
+        <div style="display: flex; align-items: center;">
+            <div class="font-size-controls">
+                <button class="font-size-btn" id="decreaseFontBtn">-</button>
+                <span class="font-size-display" id="fontSizeDisplay">16px</span>
+                <button class="font-size-btn" id="increaseFontBtn">+</button>
+            </div>
+            <div class="user-profile">
+                <img id="profileImage" class="profile-image" src="" alt="用戶頭像">
+                <div id="dropdownMenu" class="dropdown-menu">
+                    <div class="dropdown-item" id="settingsButton">設置</div>
+                    <div class="dropdown-item" id="logoutButton">登出</div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要內容區域 -->
+    <div class="main-content">
+        <!-- LINE 登入覆蓋層 -->
+        <div id="lineLoginOverlay" class="line-login-overlay">
+            <button id="lineLoginButton" class="line-login-button" style="display: none;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg" width="30" height="30" alt="LINE">
+                使用 LINE 登入
+            </button>
+        </div>
+
+        <!-- 原有的覆蓋層 -->
+        <div id="overlay" class="overlay">
+            <button id="connectButton" class="connect-button">點我開啟聲音通知</button>
+        </div>
+
+        <audio id="notificationSound" preload="auto">
+            <source src="./ding.mp3" type="audio/mpeg">
+        </audio>
+
+        <!-- 原有內容 -->
+        <div class="clock" id="clock">00:00</div>
+        
+        <div class="controls">
+            <label for="voiceSelect">選擇語音：</label>
+            <select id="voiceSelect"></select>
+        </div>
+
+        <div class="message-list" id="messageList">
+            <!-- 訊息卡片會動態插入這裡 -->
+        </div>
+    </div>
+
+    <script>
+        let speechSynth = null;
+        let voices = [];
+        let userId = null;
+        
+        // 初始化 LIFF
+        async function initializeLiff() {
+            try {
+                await liff.init({ liffId: "1655533540-137Z3L6l" });
+                console.log('LIFF 初始化成功');
+                
+                // 請求通知權限
+                if ("Notification" in window) {
+                    const permission = await Notification.requestPermission();
+                    console.log('通知權限狀態:', permission);
+                }
+
+                // 檢查是否在 LIFF 環境中
+                if (liff.isInClient()) {
+                    // 在 LIFF 瀏覽器中，直接取得用戶資料
+                    handleLineLogin();
+                } else {
+                    // 在外部瀏覽器中，先檢查 IP
+                    try {
+                        const response = await fetch('https://api.ipify.org?format=json');
+                        const data = await response.json();
+                        if (data.ip === '220.133.28.115') {
+                            // 特定 IP，直接關閉登入覆蓋層並設置預設頭像
+                            document.getElementById('lineLoginOverlay').style.display = 'none';
+                            document.getElementById('profileImage').src = './notification-icon-192x192.png';
+                            // 顯示導航欄（在桌面版）
+                            if (window.innerWidth > 768) {
+                                document.querySelector('.navbar').style.display = 'flex';
+                            }
+                            // 顯示連接伺服器覆蓋層
+                            document.getElementById('overlay').style.display = 'flex';
+                        } else {
+                            // 非特定 IP，檢查是否已登入
+                            if (liff.isLoggedIn()) {
+                                handleLineLogin();
+                            } else {
+                                // 只在外部瀏覽器才顯示登入按鈕
+                                document.getElementById('lineLoginOverlay').style.display = 'flex';
+                                document.getElementById('lineLoginButton').style.display = 'block';
+                                document.getElementById('lineLoginButton').addEventListener('click', () => {
+                                    liff.login();
+                                });
+                            }
+                        }
+                    } catch (error) {
+                        console.error('IP 檢查失敗:', error);
+                        // IP 檢查失敗時��回退到標準 LINE 登入流程
+                        if (liff.isLoggedIn()) {
+                            handleLineLogin();
+                        } else {
+                            document.getElementById('lineLoginOverlay').style.display = 'flex';
+                            document.getElementById('lineLoginButton').style.display = 'block';
+                            document.getElementById('lineLoginButton').addEventListener('click', () => {
+                                liff.login();
+                            });
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('LIFF 初始化失敗:', error);
+                alert('LINE 登入服務暫時無法使用，請稍後再試');
+            }
+        }
+
+        // 處理 LINE 登入成功
+        async function handleLineLogin() {
+            try {
+                const profile = await liff.getProfile();
+                userId = profile.userId;
+                console.log('LINE 登入成功, userId:', userId);
+                
+                // 設置用戶頭像
+                document.getElementById('profileImage').src = profile.pictureUrl;
+                
+                // 顯示導航欄（在桌面版）
+                if (window.innerWidth > 768) {
+                    document.querySelector('.navbar').style.display = 'flex';
+                }
+                
+                // 隱藏登入覆蓋層（如果存在）
+                const loginOverlay = document.getElementById('lineLoginOverlay');
+                if (loginOverlay) {
+                    loginOverlay.style.display = 'none';
+                }
+
+                // 顯示連接伺服器覆蓋層
+                document.getElementById('overlay').style.display = 'flex';
+                
+            } catch (error) {
+                console.error('獲取用戶資料失敗:', error);
+                alert('無法獲取用戶資料，請重新登入');
+            }
+        }
+
+        // 初始化 LIFF
+        initializeLiff();
+
+        // 檢測系統和瀏覽器
+        function detectSystem() {
+            const userAgent = navigator.userAgent;
+            const platform = navigator.platform;
+            let system = {
+                os: 'unknown',
+                browser: 'unknown',
+                isMobile: /iPhone|iPad|iPod|Android/.test(userAgent)
+            };
+
+            if (/iPhone|iPad|iPod/.test(userAgent)) {
+                system.os = 'iOS';
+            } else if (/Android/.test(userAgent)) {
+                system.os = 'Android';
+            } else if (/Win/.test(platform)) {
+                system.os = 'Windows';
+            } else if (/Mac/.test(platform)) {
+                system.os = 'MacOS';
+            }
+
+            if (/Safari/.test(userAgent) && !/Chrome/.test(userAgent)) {
+                system.browser = 'Safari';
+            } else if (/Chrome/.test(userAgent)) {
+                system.browser = 'Chrome';
+            } else if (/Firefox/.test(userAgent)) {
+                system.browser = 'Firefox';
+            }
+
+            console.log('檢測到的系統：', system.os);
+            console.log('檢測到的瀏覽器：', system.browser);
+            return system;
+        }
+
+        const system = detectSystem();
+
+        // 只在移動設備上初始化語音合成
+        if (!system.isMobile) {
+            speechSynth = window.speechSynthesis;
+            
+            // 載入可用的語音
+            function loadVoices() {
+                voices = speechSynth.getVoices();
+                const voiceSelect = document.getElementById('voiceSelect');
+                voiceSelect.innerHTML = '';
+
+                if (system.os === 'iOS' && system.browser === 'Safari') {
+                    const desiredVoices = {
+                        '美佳 (zh-TW)': 'zh-TW',
+                        'Karen (en-AU)': 'en-AU',
+                        'Samantha (en-US)': 'en-US',
+                        'Daniel (en-GB)': 'en-GB'
+                    };
+
+                    const addedVoices = new Set();
+
+                    voices.forEach((voice, index) => {
+                        for (let desiredVoice in desiredVoices) {
+                            if (voice.name.includes(desiredVoice.split(' ')[0]) && 
+                                voice.lang === desiredVoices[desiredVoice] &&
+                                !addedVoices.has(desiredVoice)) {
+                                const option = document.createElement('option');
+                                option.value = index;
+                                option.textContent = desiredVoice;
+                                voiceSelect.appendChild(option);
+                                addedVoices.add(desiredVoice);
+                            }
+                        }
+                    });
+                } else {
+                    voices.forEach((voice, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+                        option.textContent = `${voice.name} (${voice.lang})`;
+                        voiceSelect.appendChild(option);
+                    });
+                }
+            }
+
+            // 確保在不同瀏覽器都能正確載入語音
+            speechSynth.onvoiceschanged = loadVoices;
+            loadVoices();
+        } else {
+            // 在移動設備上隱藏語音選擇控制項
+            document.querySelector('.controls').style.display = 'none';
+        }
+
+        // 更新時鐘
+        function updateClock() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('clock').textContent = `${hours}:${minutes}`;
+        }
+
+        // 初始化時鐘並每分鐘更新
+        updateClock();
+        setInterval(updateClock, 60000);
+
+        // 朗讀文字
+        function speak(text) {
+            if (speechSynth.speaking) {
+                speechSynth.cancel();
+            }
+
+            if (text) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                const selectedVoice = voices[document.getElementById('voiceSelect').value];
+                utterance.voice = selectedVoice;
+                speechSynth.speak(utterance);
+            }
+        }
+
+        // 初始化音效
+        const notificationSound = document.getElementById('notificationSound');
+        const overlay = document.getElementById('overlay');
+        const connectButton = document.getElementById('connectButton');
+        let audioEnabled = false;
+
+        // 點擊連接按鈕
+        connectButton.addEventListener('click', async () => {
+            try {
+                // 嘗試播放音效（這會觸發用戶互動）
+                await notificationSound.play();
+                notificationSound.pause();
+                notificationSound.currentTime = 0;
+                audioEnabled = true;
+                console.log('音效播放已啟用');
+                
+                // 移除覆蓋層
+                overlay.style.animation = 'fadeOut 0.3s';
+                setTimeout(() => {
+                    overlay.remove();
+                }, 300);
+            } catch (error) {
+                console.error('無法啟用音效播放:', error);
+                alert('無法啟用音效播放，請確保允許網站播放音效');
+            }
+        });
+
+        // 音效載入檢查
+        notificationSound.addEventListener('loadeddata', () => {
+            console.log('音效檔案已成功載入');
+        });
+
+        notificationSound.addEventListener('error', (e) => {
+            console.error('音效載入失敗:', e);
+        });
+
+        // 播放通知音效或朗讀文字
+        async function playNotification(text, boradcast_student_names) {
+            if (system.isMobile) {
+                // 移動設備只播放提示音
+                if (audioEnabled) {
+                    try {
+                        notificationSound.currentTime = 0;
+                        await notificationSound.play();
+                        console.log('通知音效播放成功');
+                    } catch (error) {
+                        console.error('播放音效時發生錯誤:', error);
+                    }
+                }
+            } else {
+                // 桌面設備使用語音朗讀
+                if (speechSynth && !speechSynth.speaking) {
+                    // 分割每個學生的資料
+                    console.log(boradcast_student_names);
+                    
+                    // 重複兩次的迴圈
+                    for (let i = 0; i < 2; i++) {
+                        // 為每個學生建立語音序
+                        for (const [className, engName, zhName] of boradcast_student_names) {
+                            // 英文語音 - 班級和英文名
+                            const engUtterance = new SpeechSynthesisUtterance(`${className} ${engName}`);
+                            engUtterance.voice = englishVoice || voices.find(voice => voice.lang === 'en-US');
+                            engUtterance.rate = speechRate;
+                            speechSynth.speak(engUtterance);
+                            
+                            // 中文語音 - 中文名
+                            const zhUtterance = new SpeechSynthesisUtterance(zhName);
+                            zhUtterance.voice = chineseVoice || voices.find(voice => voice.lang === 'zh-TW');
+                            zhUtterance.rate = speechRate;
+                            speechSynth.speak(zhUtterance);
+                        }
+
+                        // 在每次重複後加上"請準備"
+                        const endUtterance = new SpeechSynthesisUtterance('請準備');
+                        const endVoice = chineseVoice || voices.find(voice => voice.lang === 'zh-TW');
+                        endUtterance.voice = endVoice;
+                        endUtterance.rate = speechRate;
+                        speechSynth.speak(endUtterance);
+                    }
+                }
+            }
+        }
+
+        // 測試音效播放
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('頁面載入完成，音效元素狀態:', {
+                'audio元素是否存在': !!notificationSound,
+                '音效來源': notificationSound.currentSrc,
+                '準備狀態': notificationSound.readyState,
+                '是否有錯誤': notificationSound.error
+            });
+        });
+
+        // 創建訊息卡片
+        function createMessageCard(data) {
+            const card = document.createElement('div');
+            // 添加唯一ID，用於刪除時識別
+            const cardId = `card-${data.timestamp.replace(/[^0-9]/g, '')}`;
+            card.id = cardId;
+            card.className = 'message-card';
+            
+            const content = document.createElement('div');
+            content.className = 'message-content';
+            
+            const time = document.createElement('div');
+            time.className = 'message-time';
+            time.textContent = data.timestamp;
+            
+            const messageText = document.createElement('div');
+            messageText.className = 'message-text';
+            
+            // 顯示訊息和學生名單
+            if (data.boradcast_student_names.length < 1) {
+                messageText.textContent = data.display_name;
+            } else {
+                const studentNames = data.students.join('、');
+                messageText.textContent = `${studentNames}`;
+            }
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.textContent = '已經接走囉';
+            deleteBtn.onclick = () => {
+                // 發送刪除事件到服務器
+                socket.emit('delete_notification', { 
+                    cardId: cardId,
+                    timestamp: data.timestamp 
+                });
+                // 本地刪除卡片
+                removeCard(cardId);
+            };
+            
+            content.appendChild(time);
+            content.appendChild(messageText);
+            card.appendChild(content);
+            card.appendChild(deleteBtn);
+            
+            // 將新卡片插入到列表的最前面
+            const messageList = document.getElementById('messageList');
+            messageList.insertBefore(card, messageList.firstChild);
+            
+            // 將原本的 speak 調用改為使用新的 playNotification
+            playNotification(data.message, data.boradcast_student_names);
+            
+            return card;
+        }
+
+        // 刪除卡片的函數
+        function removeCard(cardId) {
+            const card = document.getElementById(cardId);
+            if (card) {
+                // 添加移除中的類別來觸發過渡效果
+                card.classList.add('removing');
+                // 等待過渡效果完成後移除元素
+                setTimeout(() => {
+                    card.remove();
+                }, 200); // 配合 CSS transition 時間
+            }
+        }
+
+        // Socket.IO 連接事件處理
+        const socket = io('https://student.wentzao.com', {
+            path: '/socket.io/',
+            transports: ['websocket'],
+            upgrade: false,  // 禁用傳輸升級
+            rememberUpgrade: false,
+            timeout: 10000,
+            reconnection: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            randomizationFactor: 0.5,
+            forceNew: true,
+            auth: {
+                userId: userId
+            }
+        });
+
+        // 連接狀態監控
+        socket.on('connect', () => {
+            console.log('已連接到伺服器');
+            console.log('Transport type:', socket.io.engine.transport.name);
+            console.log('Protocol:', socket.io.engine.transport.ws ? 'WebSocket' : 'HTTP');
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('連接錯誤:', error);
+            console.log('嘗試重新連接...');
+            // 如果 WebSocket 失敗，嘗試使用輪詢
+            if (socket.io.engine.transport.name === 'websocket') {
+                console.log('WebSocket 連接失敗，切換到輪詢模式');
+                socket.io.opts.transports = ['polling', 'websocket'];
+            }
+        });
+
+        socket.on('reconnect_attempt', (attemptNumber) => {
+            console.log(`嘗試重新連接 (${attemptNumber}/10)...`);
+        });
+
+        socket.on('reconnect', (attemptNumber) => {
+            console.log(`重新連接成功 (嘗試次數: ${attemptNumber})`);
+        });
+
+        socket.on('reconnect_failed', () => {
+            console.error('重新連接失敗，已達到最大嘗試次數');
+        });
+
+        // 發送瀏覽器通知
+        function sendBrowserNotification(title, options = {}) {
+            if ("Notification" in window && Notification.permission === "granted") {
+                try {
+                    const notification = new Notification(title, {
+                        icon: './notification-icon-192x192.png',  // 建議使用 192x192 像素的圖示
+                        badge: './notification-badge-72x72.png',  // 用於 Android 的小圖示
+                        ...options
+                    });
+
+                    // 點擊通知時打開/聚焦網頁
+                    notification.onclick = () => {
+                        window.focus();
+                    };
+                } catch (error) {
+                    console.error('發送通知失敗:', error);
+                }
+            }
+        }
+
+        // 接收通知時播放音效
+        socket.on('pickup_notification', (data) => {
+            console.log('收到接送通知:', data);
+            createMessageCard(data);
+
+            // 發送瀏覽器通知
+            const studentNames = data.students.join('、');
+            sendBrowserNotification('接送通知', {
+                body: `${studentNames}`,
+                tag: 'pickup-notification',  // 避免重複通知
+                renotify: true,  // 允許重複通知發出聲音
+                requireInteraction: true  // 通知不會自動消失
+            });
+
+            // 播放通知音效
+            playNotification(data.message, data.boradcast_student_names);
+        });
+
+        socket.on('disconnect', (reason) => {
+            console.log('與伺服器斷開連接，原:', reason);
+            if (reason === 'io server disconnect') {
+                // 服務器主動斷開連接，需手動重連
+                socket.connect();
+            }
+            // 其他情況會自動嘗試重連
+        });
+
+        // 定期發送心跳包檢查連接狀態
+        setInterval(() => {
+            if (socket.connected) {
+                socket.emit('ping');
+            } else {
+                console.log('當前未連接到服務器');
+            }
+        }, 30000); // 每30秒檢查一次
+
+        socket.on('pong', () => {
+            console.log('服務器回應心跳包');
+        });
+
+        // 監聽其他使用者的刪除事件
+        socket.on('notification_deleted', (data) => {
+            console.log('收到刪除通知:', data);
+            removeCard(data.cardId);
+        });
+
+        // 監聽刪除錯誤
+        socket.on('delete_error', (error) => {
+            console.error('刪除失敗:', error);
+            alert('刪除失敗，請稍後再試');
+        });
+
+        // 頭像下拉選單控制
+        document.getElementById('profileImage').addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('dropdownMenu').classList.toggle('show');
+        });
+
+        // 點擊其他地方關閉下拉選單
+        document.addEventListener('click', () => {
+            document.getElementById('dropdownMenu').classList.remove('show');
+        });
+
+        // 登出功能
+        document.getElementById('logoutButton').addEventListener('click', async () => {
+            try {
+                if (!liff.isInClient()) {
+                    // 只在外部瀏覽器中才需要登出
+                    await liff.logout();
+                }
+                // 重新載入頁面
+                window.location.reload();
+            } catch (error) {
+                console.error('登出失敗:', error);
+                alert('登出失敗，請稍後再試');
+            }
+        });
+
+        // 字體大小控制
+        let currentFontSize = parseInt(localStorage.getItem('cardFontSize')) || 16;
+        const minFontSize = 12;
+        const maxFontSize = 48;
+        const fontSizeStep = 4;
+
+        function updateFontSize(size) {
+            currentFontSize = Math.max(minFontSize, Math.min(maxFontSize, size));
+            document.documentElement.style.setProperty('--card-font-size', `${currentFontSize}px`);
+            document.getElementById('fontSizeDisplay').textContent = `${currentFontSize}px`;
+            localStorage.setItem('cardFontSize', currentFontSize);
+        }
+
+        // 初始化字體大小
+        updateFontSize(currentFontSize);
+
+        // 綁定按鈕事件
+        document.getElementById('increaseFontBtn').addEventListener('click', () => {
+            updateFontSize(currentFontSize + fontSizeStep);
+        });
+
+        document.getElementById('decreaseFontBtn').addEventListener('click', () => {
+            updateFontSize(currentFontSize - fontSizeStep);
+        });
+
+        // 語音設置相關變數
+        let chineseVoice = null;
+        let englishVoice = null;
+        let speechRate = 1;
+        let isTestPlaying = false;
+
+        // 載入儲存的設置
+        function loadSavedSettings() {
+            const savedSettings = JSON.parse(localStorage.getItem('voiceSettings') || '{}');
+            if (savedSettings.chineseVoice) {
+                chineseVoice = voices.find(v => v.name === savedSettings.chineseVoice);
+            }
+            if (savedSettings.englishVoice) {
+                englishVoice = voices.find(v => v.name === savedSettings.englishVoice);
+            }
+            if (savedSettings.speechRate) {
+                speechRate = savedSettings.speechRate;
+                document.getElementById('rateRange').value = speechRate;
+                document.getElementById('rateValue').textContent = speechRate;
+            }
+        }
+
+        // 儲存設置
+        function saveSettings() {
+            const settings = {
+                chineseVoice: chineseVoice?.name,
+                englishVoice: englishVoice?.name,
+                speechRate: speechRate
+            };
+            localStorage.setItem('voiceSettings', JSON.stringify(settings));
+        }
+
+        // 更新語音選擇下拉選單
+        function updateVoiceSelects() {
+            const chineseSelect = document.getElementById('chineseVoiceSelect');
+            const englishSelect = document.getElementById('englishVoiceSelect');
+            
+            chineseSelect.innerHTML = '';
+            englishSelect.innerHTML = '';
+
+            // 添加預設選項
+            const defaultChineseOption = document.createElement('option');
+            defaultChineseOption.value = '';
+            defaultChineseOption.textContent = '請選擇中文語音';
+            chineseSelect.appendChild(defaultChineseOption);
+
+            const defaultEnglishOption = document.createElement('option');
+            defaultEnglishOption.value = '';
+            defaultEnglishOption.textContent = '請選擇英文語音';
+            englishSelect.appendChild(defaultEnglishOption);
+
+            voices.forEach(voice => {
+                const option = document.createElement('option');
+                option.value = voice.name;
+                option.textContent = `${voice.name} (${voice.lang})`;
+                
+                if (voice.lang.startsWith('zh')) {
+                    chineseSelect.appendChild(option);
+                    if (chineseVoice && voice.name === chineseVoice.name) {
+                        option.selected = true;
+                    }
+                } else if (voice.lang.startsWith('en')) {
+                    englishSelect.appendChild(option);
+                    if (englishVoice && voice.name === englishVoice.name) {
+                        option.selected = true;
+                    }
+                }
+            });
+        }
+
+        // 設置 Modal 控制
+        const settingsModal = document.getElementById('settingsModal');
+        const settingsButton = document.getElementById('settingsButton');
+        const closeModal = document.querySelector('.close-modal');
+        const saveSettingsBtn = document.querySelector('.save-settings');
+
+        settingsButton.onclick = () => {
+            settingsModal.style.display = 'block';
+            document.getElementById('dropdownMenu').classList.remove('show');
+            
+            // 重新載入已保存的設置
+            const savedSettings = JSON.parse(localStorage.getItem('voiceSettings') || '{}');
+            
+            if (savedSettings.chineseVoice) {
+                document.getElementById('chineseVoiceSelect').value = savedSettings.chineseVoice;
+            }
+            if (savedSettings.englishVoice) {
+                document.getElementById('englishVoiceSelect').value = savedSettings.englishVoice;
+            }
+            if (savedSettings.speechRate) {
+                document.getElementById('rateRange').value = savedSettings.speechRate;
+                document.getElementById('rateValue').textContent = savedSettings.speechRate;
+            }
+        };
+
+        closeModal.onclick = () => {
+            settingsModal.style.display = 'none';
+        };
+
+        window.onclick = (event) => {
+            if (event.target === settingsModal) {
+                settingsModal.style.display = 'none';
+            }
+        };
+
+        // 語速控制
+        const rateRange = document.getElementById('rateRange');
+        const rateValue = document.getElementById('rateValue');
+
+        rateRange.oninput = () => {
+            speechRate = parseFloat(rateRange.value);
+            rateValue.textContent = speechRate;
+        };
+
+        // 語音選擇事件處理
+        document.getElementById('chineseVoiceSelect').onchange = (e) => {
+            chineseVoice = voices.find(v => v.name === e.target.value);
+        };
+
+        document.getElementById('englishVoiceSelect').onchange = (e) => {
+            englishVoice = voices.find(v => v.name === e.target.value);
+        };
+
+        // 測試語音功能
+        const playTest = document.getElementById('playTest');
+        const pauseTest = document.getElementById('pauseTest');
+        const testText = document.getElementById('testText');
+
+        function isChineseChar(char) {
+            return /[\u4e00-\u9fa5]/.test(char);
+        }
+
+        function splitTextByLanguage(text) {
+            let segments = [];
+            let currentSegment = '';
+            let currentType = null;
+
+            for (let char of text) {
+                let isCurrentChinese = isChineseChar(char);
+                
+                if (currentType === null) {
+                    currentType = isCurrentChinese;
+                    currentSegment = char;
+                } else if (currentType === isCurrentChinese) {
+                    currentSegment += char;
+                } else {
+                    if (currentSegment.trim()) {
+                        segments.push({
+                            text: currentSegment.trim(),
+                            isChinese: currentType
+                        });
+                    }
+                    currentType = isCurrentChinese;
+                    currentSegment = char;
+                }
+            }
+
+            if (currentSegment.trim()) {
+                segments.push({
+                    text: currentSegment.trim(),
+                    isChinese: currentType
+                });
+            }
+
+            return segments;
+        }
+
+        function speakSegments(segments, index = 0) {
+            if (index >= segments.length) {
+                isTestPlaying = false;
+                playTest.disabled = false;
+                pauseTest.disabled = true;
+                return;
+            }
+
+            const segment = segments[index];
+            const utterance = new SpeechSynthesisUtterance(segment.text);
+            utterance.voice = segment.isChinese ? chineseVoice : englishVoice;
+            utterance.rate = speechRate;
+
+            utterance.onend = () => {
+                if (isTestPlaying) {
+                    speakSegments(segments, index + 1);
+                }
+            };
+
+            speechSynth.speak(utterance);
+        }
+
+        playTest.onclick = () => {
+            if (speechSynth.speaking) {
+                speechSynth.cancel();
+            }
+
+            const text = testText.value;
+            const segments = splitTextByLanguage(text);
+            
+            isTestPlaying = true;
+            playTest.disabled = true;
+            pauseTest.disabled = false;
+            
+            speakSegments(segments);
+        };
+
+        pauseTest.onclick = () => {
+            isTestPlaying = false;
+            speechSynth.cancel();
+            playTest.disabled = false;
+            pauseTest.disabled = true;
+        };
+
+        // 儲存設置
+        saveSettingsBtn.onclick = () => {
+            saveSettings();
+            settingsModal.style.display = 'none';
+            alert('設置已儲存');
+        };
+
+        // 初始化語音設置
+        if (speechSynth) {
+            speechSynth.onvoiceschanged = () => {
+                voices = speechSynth.getVoices();
+                updateVoiceSelects();
+                loadSavedSettings();
+            };
+            voices = speechSynth.getVoices();
+            updateVoiceSelects();
+            loadSavedSettings();
+        }
+    </script>
+</body>
+</html>
