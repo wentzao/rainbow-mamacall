@@ -806,9 +806,9 @@
                     // 重複兩次的迴圈
                     for (let i = 0; i < 2; i++) {
                         // 為每個學生建立語音序
-                        for (const [className, engName, zhName] of boradcast_student_names) {
-                            // 英文語音 - 班級和英文名
-                            const engUtterance = new SpeechSynthesisUtterance(`${className} ${engName}`);
+                        for (const [engName, zhName] of boradcast_student_names) {
+                            // 英文語音 - 英文名
+                            const engUtterance = new SpeechSynthesisUtterance(`${engName}`);
                             engUtterance.voice = englishVoice || voices.find(voice => voice.lang === 'en-US');
                             engUtterance.rate = speechRate;
                             speechSynth.speak(engUtterance);
