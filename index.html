@@ -841,8 +841,8 @@
             });
         });
 
-        // 創建訊息卡片
-        function createMessageCard(data) {
+            // 創建訊息卡片
+            function createMessageCard_pickup(data) {
             const card = document.createElement('div');
             // 添加唯一ID，用於刪除時識別
             const cardId = `card-${data.timestamp.replace(/[^0-9]/g, '')}`;
@@ -861,10 +861,64 @@
             
             // 顯示訊息和學生名單
             if (data.boradcast_student_names.length < 1) {
-                messageText.textContent = data.display_name;
+                messageText.textContent = `${data.display_name}已出發`;
             } else {
                 const studentNames = data.students.join('、');
-                messageText.textContent = `${studentNames}`;
+                messageText.textContent = `${studentNames}已出發`;
+            }
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.textContent = '已經接走囉';
+            deleteBtn.onclick = () => {
+                // 發送刪除事件到服務器
+                socket.emit('delete_notification', { 
+                    cardId: cardId,
+                    timestamp: data.timestamp 
+                });
+                // 本地刪除卡片
+                removeCard(cardId);
+            };
+            
+            content.appendChild(time);
+            content.appendChild(messageText);
+            card.appendChild(content);
+            card.appendChild(deleteBtn);
+            
+            // 將新卡片插入到列表的最前面
+            const messageList = document.getElementById('messageList');
+            messageList.insertBefore(card, messageList.firstChild);
+            
+            // 將原本的 speak 調用改為使用新的 playNotification
+            playNotification(data.message, data.boradcast_student_names);
+            
+            return card;
+        }
+
+        // 創建訊息卡片
+        function createMessageCard_arrived(data) {
+            const card = document.createElement('div');
+            // 添加唯一ID，用於刪除時識別
+            const cardId = `card-${data.timestamp.replace(/[^0-9]/g, '')}`;
+            card.id = cardId;
+            card.className = 'message-card';
+            
+            const content = document.createElement('div');
+            content.className = 'message-content';
+            
+            const time = document.createElement('div');
+            time.className = 'message-time';
+            time.textContent = data.timestamp;
+            
+            const messageText = document.createElement('div');
+            messageText.className = 'message-text';
+            
+            // 顯示訊息和學生名單
+            if (data.boradcast_student_names.length < 1) {
+                messageText.textContent = `${data.display_name}已抵達`;
+            } else {
+                const studentNames = data.students.join('、');
+                messageText.textContent = `${studentNames}已抵達`;
             }
             
             const deleteBtn = document.createElement('button');
@@ -978,13 +1032,31 @@
         // 接收通知時播放音效
         socket.on('pickup_notification', (data) => {
             console.log('收到接送通知:', data);
-            createMessageCard(data);
+            createMessageCard_pickup(data);
 
             // 發送瀏覽器通知
             const studentNames = data.students.join('、');
             sendBrowserNotification('接送通知', {
                 body: `${studentNames}`,
                 tag: 'pickup-notification',  // 避免重複通知
+                renotify: true,  // 允許重複通知發出聲音
+                requireInteraction: true  // 通知不會自動消失
+            });
+
+            // 播放通知音效
+            playNotification(data.message, data.boradcast_student_names);
+        });
+
+                // 接收通知時播放音效
+        socket.on('arrived_notification', (data) => {
+            console.log('收到抵達通知:', data);
+            createMessageCard_arrived(data);
+
+            // 發送瀏覽器通知
+            const studentNames = data.students.join('、');
+            sendBrowserNotification('抵達通知', {
+                body: `${studentNames}`,
+                tag: 'arrived-notification',  // 避免重複通知
                 renotify: true,  // 允許重複通知發出聲音
                 requireInteraction: true  // 通知不會自動消失
             });
