@@ -85,7 +85,7 @@
 
         /* 修改主要內容區域，為導航欄留出空間 */
         .main-content {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 80px auto 20px;
             padding: 0 20px;
         }
@@ -165,12 +165,17 @@
 
         /* 原有樣式保持不變 */
         .clock {
-            font-size: 4em;
+            font-size: 1.2em;
             font-weight: bold;
-            text-align: center;
-            margin: 20px 0;
             color: #333;
-            font-family: 'Digital', Arial, sans-serif;
+        }
+
+        .navbar .clock {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
         }
 
         .controls {
@@ -209,10 +214,11 @@
         }
 
         .column-title {
-            font-size: 1.1em;
+            font-size: 1.4em;
             font-weight: bold;
             color: #333;
             margin: 10px 0;
+            text-align: center;
         }
 
         @media (max-width: 768px) {
@@ -511,6 +517,7 @@
     <!-- 導航欄 -->
     <nav class="navbar">
         <div class="navbar-brand">語音廣播系統</div>
+        <div class="clock" id="clock">00:00</div>
         <div style="display: flex; align-items: center;">
             <div class="font-size-controls">
                 <button class="font-size-btn" id="decreaseFontBtn">-</button>
@@ -547,8 +554,6 @@
         </audio>
 
         <!-- 原有內容 -->
-        <div class="clock" id="clock">00:00</div>
-        
         <div class="controls">
             <label for="voiceSelect">選擇語音：</label>
             <select id="voiceSelect"></select>
@@ -898,10 +903,10 @@
             
             // 顯示訊息和學生名單
             if (data.boradcast_student_names.length < 1) {
-                messageText.textContent = `${data.display_name}已出發`;
+                messageText.textContent = `${data.display_name}`;
             } else {
                 const studentNames = data.students.join('、');
-                messageText.textContent = `${studentNames}已出發`;
+                messageText.textContent = `${studentNames}`;
             }
             
             const deleteBtn = document.createElement('button');
@@ -952,10 +957,10 @@
             
             // 顯示訊息和學生名單
             if (data.boradcast_student_names.length < 1) {
-                messageText.textContent = `${data.display_name}已抵達`;
+                messageText.textContent = `${data.display_name}`;
             } else {
                 const studentNames = data.students.join('、');
-                messageText.textContent = `${studentNames}已抵達`;
+                messageText.textContent = `${studentNames}`;
             }
             
             const deleteBtn = document.createElement('button');
