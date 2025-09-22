@@ -196,6 +196,31 @@
             gap: 15px;
         }
 
+        /* 新增：兩欄容器與標題 */
+        .message-columns {
+            display: flex;
+            gap: 16px;
+        }
+
+        .message-column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .column-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #333;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 768px) {
+            .message-columns {
+                flex-direction: column;
+            }
+        }
+
         .message-card {
             background: white;
             padding: 15px;
@@ -529,8 +554,20 @@
             <select id="voiceSelect"></select>
         </div>
 
-        <div class="message-list" id="messageList">
-            <!-- 訊息卡片會動態插入這裡 -->
+        <!-- 新的兩欄訊息區域 -->
+        <div class="message-columns" id="messageColumns">
+            <div class="message-column">
+                <div class="column-title">已出發</div>
+                <div class="message-list" id="pickupList">
+                    <!-- 接送（已出發）訊息卡片會動態插入這裡 -->
+                </div>
+            </div>
+            <div class="message-column">
+                <div class="column-title">已抵達</div>
+                <div class="message-list" id="arrivedList">
+                    <!-- 已抵達訊息卡片會動態插入這裡 -->
+                </div>
+            </div>
         </div>
     </div>
 
@@ -585,7 +622,7 @@
                         }
                     } catch (error) {
                         console.error('IP 檢查失敗:', error);
-                        // IP 檢查失敗時��回退到標準 LINE 登入流程
+                        // IP 檢查失敗時回退到標準 LINE 登入流程
                         if (liff.isLoggedIn()) {
                             handleLineLogin();
                         } else {
@@ -885,8 +922,8 @@
             card.appendChild(content);
             card.appendChild(deleteBtn);
             
-            // 將新卡片插入到列表的最前面
-            const messageList = document.getElementById('messageList');
+            // 將新卡片插入到「已出發」列表的最前面
+            const messageList = document.getElementById('pickupList');
             messageList.insertBefore(card, messageList.firstChild);
             
             // 將原本的 speak 調用改為使用新的 playNotification
@@ -939,8 +976,8 @@
             card.appendChild(content);
             card.appendChild(deleteBtn);
             
-            // 將新卡片插入到列表的最前面
-            const messageList = document.getElementById('messageList');
+            // 將新卡片插入到「已抵達」列表的最前面
+            const messageList = document.getElementById('arrivedList');
             messageList.insertBefore(card, messageList.firstChild);
             
             // 將原本的 speak 調用改為使用新的 playNotification
