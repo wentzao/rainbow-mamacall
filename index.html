@@ -885,12 +885,9 @@
                     const template = type === 'arrived'
                         ? (saved.broadcastTemplateArrived || broadcastTemplateArrived)
                         : (saved.broadcastTemplatePickup || broadcastTemplatePickup);
-                    for (const [engName, zhName] of boradcast_student_names || []) {
-                        const filled = template
-                            .replaceAll('{英文名}', engName || '')
-                            .replaceAll('{中文名}', zhName || '');
-                        speakTextLanguageAware(filled);
-                    }
+                    // 將多位小朋友展開為單一一句話
+                    const filled = fillTemplateForMultiple(template, boradcast_student_names);
+                    enqueueSpeech(filled);
                 }
             }
         }
@@ -1523,6 +1520,81 @@
         if (insertEnBtnPickup && tplTextareaPickup) insertEnBtnPickup.onclick = () => insertAtCursor(tplTextareaPickup, '{英文名}');
         if (insertZhBtnArrived && tplTextareaArrived) insertZhBtnArrived.onclick = () => insertAtCursor(tplTextareaArrived, '{中文名}');
         if (insertEnBtnArrived && tplTextareaArrived) insertEnBtnArrived.onclick = () => insertAtCursor(tplTextareaArrived, '{英文名}');
+
+        // 依模板填入多位學生姓名：將所有孩子的英文名與中文名依序展開
+        function buildNamesText(boradcast_student_names) {
+            if (!Array.isArray(boradcast_student_names) || boradcast_student_names.length === 0) return '';
+            // 每個元素為 [engName, zhName]
+            const parts = [];
+            for (const pair of boradcast_student_names) {
+                const eng = pair?.[0] || '';
+                const zh = pair?.[1] || '';
+                // 名稱之間以空白分隔，語音會自然停頓
+                parts.push(eng, zh);
+            }
+            return parts.filter(Boolean).join(' ');
+        }
+
+        function fillTemplateForMultiple(template, boradcast_student_names) {
+            if (!template) return '';
+            if (!Array.isArray(boradcast_student_names) || boradcast_student_names.length === 0) {
+                // 沒有名單直接清空 token
+                return template.replaceAll('{英文名}', '').replaceAll('{中文名}', '').replace(/\s+/g, ' ').trim();
+            }
+            // 規則：將所有孩子的英文名與中文名串接放前面，保留模板中的其他文字
+            // 取出模板中 token 之外的前後文字，以第一個 token 出現位置為界，將名稱集合放在最前面。
+            const namesJoined = buildNamesText(boradcast_student_names);
+            // 移除模板中的 token 並壓縮空白
+            const templateWithoutTokens = template.replaceAll('{英文名}', '').replaceAll('{中文名}', '').replace(/\s+/g, ' ').trim();
+            return (namesJoined + ' ' + templateWithoutTokens).replace(/\s+/g, ' ').trim();
+        }
+
+        // 全域語音播放佇列（桌面）
+        const speechQueue = [];
+        let isProcessingQueue = false;
+
+        function enqueueSpeech(text) {
+            if (!text) return;
+            speechQueue.push(text);
+            processSpeechQueue();
+        }
+
+        function processSpeechQueue() {
+            if (!speechSynth) return;
+            if (isProcessingQueue) return;
+            if (speechQueue.length === 0) return;
+            isProcessingQueue = true;
+
+            const nextText = speechQueue.shift();
+            const segments = splitTextByLanguage(nextText);
+            speakSegmentsSequential(segments, 0, () => {
+                isProcessingQueue = false;
+                // 完成一筆後立刻處理下一筆（若有）
+                processSpeechQueue();
+            });
+        }
+
+        // 以語言分段的序列播放（用於佇列項目）
+        function speakSegmentsSequential(segments, index, onComplete) {
+            if (!speechSynth) { if (onComplete) onComplete(); return; }
+            if (index >= segments.length) { if (onComplete) onComplete(); return; }
+
+            const segment = segments[index];
+            const utterance = new SpeechSynthesisUtterance(segment.text);
+            utterance.voice = segment.isChinese
+                ? (chineseVoice || voices.find(v => v.lang && v.lang.startsWith('zh')))
+                : (englishVoice || voices.find(v => v.lang && v.lang.startsWith('en')));
+            utterance.rate = speechRate;
+
+            utterance.onend = () => {
+                speakSegmentsSequential(segments, index + 1, onComplete);
+            };
+            utterance.onerror = () => {
+                speakSegmentsSequential(segments, index + 1, onComplete);
+            };
+
+            speechSynth.speak(utterance);
+        }
     </script>
 </body>
 </html>
