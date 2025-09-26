@@ -168,6 +168,7 @@
             font-size: 1.2em;
             font-weight: bold;
             color: #333;
+            font-family: 'Digital', Arial, sans-serif;
         }
 
         .navbar .clock {
@@ -396,6 +397,22 @@
             border-radius: 4px;
         }
 
+        .settings-group textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .template-tokens {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
         .voice-test {
             margin-top: 20px;
             padding: 15px;
@@ -499,6 +516,14 @@
                         <input type="range" id="rateRange" min="0.5" max="2" step="0.1" value="1">
                     </div>
                 </div>
+                <div class="settings-group">
+                    <label>廣播模板</label>
+                    <div class="template-tokens">
+                        <button type="button" class="voice-btn" id="insertZhName">中文名</button>
+                        <button type="button" class="voice-btn" id="insertEnName">英文名</button>
+                    </div>
+                    <textarea id="broadcastTemplate" placeholder="輸入廣播模板，例如：{英文名} {中文名} 請準備"></textarea>
+                </div>
                 <div class="voice-test">
                     <label>語音測試</label>
                     <textarea id="testText" placeholder="輸入測試文字">Sun 1 Austin 王士軒 Sun 1 Austin 王士軒 請準備</textarea>
@@ -580,6 +605,7 @@
         let speechSynth = null;
         let voices = [];
         let userId = null;
+        let broadcastTemplate = '{英文名} {中文名} 請準備';
         
         // 初始化 LIFF
         async function initializeLiff() {
@@ -840,37 +866,33 @@
                     }
                 }
             } else {
-                // 桌面設備使用語音朗讀
-                if (speechSynth && !speechSynth.speaking) {
-                    // 分割每個學生的資料
-                    console.log(boradcast_student_names);
-                    
-                    // 重複兩次的迴圈
-                    for (let i = 0; i < 2; i++) {
-                        // 為每個學生建立語音序
-                        for (const [engName, zhName] of boradcast_student_names) {
-                            // 英文語音 - 英文名
-                            const engUtterance = new SpeechSynthesisUtterance(`${engName}`);
-                            engUtterance.voice = englishVoice || voices.find(voice => voice.lang === 'en-US');
-                            engUtterance.rate = speechRate;
-                            speechSynth.speak(engUtterance);
-                            
-                            // 中文語音 - 中文名
-                            const zhUtterance = new SpeechSynthesisUtterance(zhName);
-                            zhUtterance.voice = chineseVoice || voices.find(voice => voice.lang === 'zh-TW');
-                            zhUtterance.rate = speechRate;
-                            speechSynth.speak(zhUtterance);
-                        }
-
-                        // 在每次重複後加上"請準備"
-                        const endUtterance = new SpeechSynthesisUtterance('請準備');
-                        const endVoice = chineseVoice || voices.find(voice => voice.lang === 'zh-TW');
-                        endUtterance.voice = endVoice;
-                        endUtterance.rate = speechRate;
-                        speechSynth.speak(endUtterance);
+                // 桌面設備使用語音朗讀（依自訂模板與語言偵測）
+                if (speechSynth) {
+                    const saved = JSON.parse(localStorage.getItem('voiceSettings') || '{}');
+                    const template = saved.broadcastTemplate || broadcastTemplate;
+                    for (const [engName, zhName] of boradcast_student_names || []) {
+                        const filled = template
+                            .replaceAll('{英文名}', engName || '')
+                            .replaceAll('{中文名}', zhName || '');
+                        speakTextLanguageAware(filled);
                     }
                 }
             }
+        }
+
+        // 語言感知的朗讀工具：依字元語系選擇語音
+        function speakTextLanguageAware(text) {
+            if (!speechSynth || !text) return;
+            const segments = splitTextByLanguage(text);
+            segments.forEach(segment => {
+                if (!segment.text) return;
+                const utterance = new SpeechSynthesisUtterance(segment.text);
+                utterance.voice = segment.isChinese
+                    ? (chineseVoice || voices.find(v => v.lang && v.lang.startsWith('zh')))
+                    : (englishVoice || voices.find(v => v.lang && v.lang.startsWith('en')));
+                utterance.rate = speechRate;
+                speechSynth.speak(utterance);
+            });
         }
 
         // 測試音效播放
@@ -1212,6 +1234,11 @@
                 document.getElementById('rateRange').value = speechRate;
                 document.getElementById('rateValue').textContent = speechRate;
             }
+            if (savedSettings.broadcastTemplate) {
+                broadcastTemplate = savedSettings.broadcastTemplate;
+                const tpl = document.getElementById('broadcastTemplate');
+                if (tpl) tpl.value = broadcastTemplate;
+            }
         }
 
         // 儲存設置
@@ -1219,9 +1246,12 @@
             const settings = {
                 chineseVoice: chineseVoice?.name,
                 englishVoice: englishVoice?.name,
-                speechRate: speechRate
+                speechRate: speechRate,
+                broadcastTemplate: (document.getElementById('broadcastTemplate')?.value || broadcastTemplate || '').trim()
             };
             localStorage.setItem('voiceSettings', JSON.stringify(settings));
+            // 方便快速讀取模板
+            broadcastTemplate = settings.broadcastTemplate || broadcastTemplate;
         }
 
         // 更新語音選擇下拉選單
@@ -1285,6 +1315,7 @@
                 document.getElementById('rateRange').value = savedSettings.speechRate;
                 document.getElementById('rateValue').textContent = savedSettings.speechRate;
             }
+            document.getElementById('broadcastTemplate').value = savedSettings.broadcastTemplate || broadcastTemplate || '{英文名} {中文名} 請準備';
         };
 
         closeModal.onclick = () => {
@@ -1421,6 +1452,25 @@
             updateVoiceSelects();
             loadSavedSettings();
         }
+
+        // 模板按鈕插入文字
+        function insertAtCursor(textarea, token) {
+            const el = textarea;
+            const start = el.selectionStart ?? el.value.length;
+            const end = el.selectionEnd ?? el.value.length;
+            const pre = el.value.substring(0, start);
+            const post = el.value.substring(end);
+            el.value = pre + token + post;
+            const pos = start + token.length;
+            el.selectionStart = el.selectionEnd = pos;
+            el.focus();
+        }
+
+        const insertZhBtn = document.getElementById('insertZhName');
+        const insertEnBtn = document.getElementById('insertEnName');
+        const tplTextarea = document.getElementById('broadcastTemplate');
+        if (insertZhBtn && tplTextarea) insertZhBtn.onclick = () => insertAtCursor(tplTextarea, '{中文名}');
+        if (insertEnBtn && tplTextarea) insertEnBtn.onclick = () => insertAtCursor(tplTextarea, '{英文名}');
     </script>
 </body>
 </html>
