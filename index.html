@@ -517,16 +517,28 @@
                     </div>
                 </div>
                 <div class="settings-group">
-                    <label>廣播模板</label>
+                    <label>已出發模板</label>
                     <div class="template-tokens">
-                        <button type="button" class="voice-btn" id="insertZhName">中文名</button>
-                        <button type="button" class="voice-btn" id="insertEnName">英文名</button>
+                        <button type="button" class="voice-btn" id="insertZhNamePickup">中文名</button>
+                        <button type="button" class="voice-btn" id="insertEnNamePickup">英文名</button>
                     </div>
-                    <textarea id="broadcastTemplate" placeholder="輸入廣播模板，例如：{英文名} {中文名} 請準備"></textarea>
+                    <textarea id="broadcastTemplatePickup" placeholder="例如：{英文名} {中文名} 請準備"></textarea>
+                </div>
+                <div class="settings-group">
+                    <label>已抵達模板</label>
+                    <div class="template-tokens">
+                        <button type="button" class="voice-btn" id="insertZhNameArrived">中文名</button>
+                        <button type="button" class="voice-btn" id="insertEnNameArrived">英文名</button>
+                    </div>
+                    <textarea id="broadcastTemplateArrived" placeholder="例如：{英文名} {中文名} 家長已到達"></textarea>
                 </div>
                 <div class="voice-test">
                     <label>語音測試</label>
-                    <textarea id="testText" placeholder="輸入測試文字">Sun 1 Austin 王士軒 Sun 1 Austin 王士軒 請準備</textarea>
+                    <div style="margin: 6px 0 10px 0;">
+                        <label><input type="radio" name="testType" value="pickup" checked> 已出發</label>
+                        <label style="margin-left: 12px;"><input type="radio" name="testType" value="arrived"> 已抵達</label>
+                    </div>
+                    <textarea id="testText" placeholder="將依模板自動產生測試內容（Austin／王士軒）" readonly></textarea>
                     <div class="voice-controls">
                         <button id="playTest" class="voice-btn">播放</button>
                         <button id="pauseTest" class="voice-btn" disabled>暫停</button>
@@ -605,7 +617,8 @@
         let speechSynth = null;
         let voices = [];
         let userId = null;
-        let broadcastTemplate = '{英文名} {中文名} 請準備';
+        let broadcastTemplatePickup = '{英文名} {中文名} 請準備';
+        let broadcastTemplateArrived = '{英文名} {中文名} 家長已到達';
         
         // 初始化 LIFF
         async function initializeLiff() {
@@ -853,7 +866,7 @@
         });
 
         // 播放通知音效或朗讀文字
-        async function playNotification(text, boradcast_student_names) {
+        async function playNotification(text, boradcast_student_names, type) {
             if (system.isMobile) {
                 // 移動設備只播放提示音
                 if (audioEnabled) {
@@ -869,7 +882,9 @@
                 // 桌面設備使用語音朗讀（依自訂模板與語言偵測）
                 if (speechSynth) {
                     const saved = JSON.parse(localStorage.getItem('voiceSettings') || '{}');
-                    const template = saved.broadcastTemplate || broadcastTemplate;
+                    const template = type === 'arrived'
+                        ? (saved.broadcastTemplateArrived || broadcastTemplateArrived)
+                        : (saved.broadcastTemplatePickup || broadcastTemplatePickup);
                     for (const [engName, zhName] of boradcast_student_names || []) {
                         const filled = template
                             .replaceAll('{英文名}', engName || '')
@@ -954,7 +969,6 @@
             messageList.insertBefore(card, messageList.firstChild);
             
             // 將原本的 speak 調用改為使用新的 playNotification
-            playNotification(data.message, data.boradcast_student_names);
             
             return card;
         }
@@ -1008,7 +1022,6 @@
             messageList.insertBefore(card, messageList.firstChild);
             
             // 將原本的 speak 調用改為使用新的 playNotification
-            playNotification(data.message, data.boradcast_student_names);
             
             return card;
         }
@@ -1108,7 +1121,7 @@
             });
 
             // 播放通知音效
-            playNotification(data.message, data.boradcast_student_names);
+            playNotification(data.message, data.boradcast_student_names, 'pickup');
         });
 
                 // 接收通知時播放音效
@@ -1126,7 +1139,7 @@
             });
 
             // 播放通知音效
-            playNotification(data.message, data.boradcast_student_names);
+            playNotification(data.message, data.boradcast_student_names, 'arrived');
         });
 
         socket.on('disconnect', (reason) => {
@@ -1234,10 +1247,15 @@
                 document.getElementById('rateRange').value = speechRate;
                 document.getElementById('rateValue').textContent = speechRate;
             }
-            if (savedSettings.broadcastTemplate) {
-                broadcastTemplate = savedSettings.broadcastTemplate;
-                const tpl = document.getElementById('broadcastTemplate');
-                if (tpl) tpl.value = broadcastTemplate;
+            if (savedSettings.broadcastTemplatePickup) {
+                broadcastTemplatePickup = savedSettings.broadcastTemplatePickup;
+                const tpl1 = document.getElementById('broadcastTemplatePickup');
+                if (tpl1) tpl1.value = broadcastTemplatePickup;
+            }
+            if (savedSettings.broadcastTemplateArrived) {
+                broadcastTemplateArrived = savedSettings.broadcastTemplateArrived;
+                const tpl2 = document.getElementById('broadcastTemplateArrived');
+                if (tpl2) tpl2.value = broadcastTemplateArrived;
             }
         }
 
@@ -1247,11 +1265,13 @@
                 chineseVoice: chineseVoice?.name,
                 englishVoice: englishVoice?.name,
                 speechRate: speechRate,
-                broadcastTemplate: (document.getElementById('broadcastTemplate')?.value || broadcastTemplate || '').trim()
+                broadcastTemplatePickup: (document.getElementById('broadcastTemplatePickup')?.value || broadcastTemplatePickup || '').trim(),
+                broadcastTemplateArrived: (document.getElementById('broadcastTemplateArrived')?.value || broadcastTemplateArrived || '').trim()
             };
             localStorage.setItem('voiceSettings', JSON.stringify(settings));
             // 方便快速讀取模板
-            broadcastTemplate = settings.broadcastTemplate || broadcastTemplate;
+            broadcastTemplatePickup = settings.broadcastTemplatePickup || broadcastTemplatePickup;
+            broadcastTemplateArrived = settings.broadcastTemplateArrived || broadcastTemplateArrived;
         }
 
         // 更新語音選擇下拉選單
@@ -1315,7 +1335,8 @@
                 document.getElementById('rateRange').value = savedSettings.speechRate;
                 document.getElementById('rateValue').textContent = savedSettings.speechRate;
             }
-            document.getElementById('broadcastTemplate').value = savedSettings.broadcastTemplate || broadcastTemplate || '{英文名} {中文名} 請準備';
+            document.getElementById('broadcastTemplatePickup').value = savedSettings.broadcastTemplatePickup || broadcastTemplatePickup || '{英文名} {中文名} 請準備';
+            document.getElementById('broadcastTemplateArrived').value = savedSettings.broadcastTemplateArrived || broadcastTemplateArrived || '{英文名} {中文名} 家長已到達';
         };
 
         closeModal.onclick = () => {
@@ -1412,18 +1433,44 @@
             speechSynth.speak(utterance);
         }
 
+        function refreshTestPreview() {
+            const type = (document.querySelector('input[name="testType"]:checked')?.value) || 'pickup';
+            const saved = JSON.parse(localStorage.getItem('voiceSettings') || '{}');
+            const template = type === 'arrived'
+                ? (document.getElementById('broadcastTemplateArrived')?.value || saved.broadcastTemplateArrived || broadcastTemplateArrived)
+                : (document.getElementById('broadcastTemplatePickup')?.value || saved.broadcastTemplatePickup || broadcastTemplatePickup);
+            const preview = template
+                .replaceAll('{英文名}', 'Austin')
+                .replaceAll('{中文名}', '王士軒');
+            const testText = document.getElementById('testText');
+            if (testText) testText.value = preview;
+        }
+
+        // 初始載入
+        refreshTestPreview();
+
+        // 變更測試類型時更新
+        document.querySelectorAll('input[name="testType"]').forEach(r => {
+            r.addEventListener('change', refreshTestPreview);
+        });
+
+        // 變更模板時更新
+        const tplPickup = document.getElementById('broadcastTemplatePickup');
+        const tplArrived = document.getElementById('broadcastTemplateArrived');
+        if (tplPickup) tplPickup.addEventListener('input', refreshTestPreview);
+        if (tplArrived) tplArrived.addEventListener('input', refreshTestPreview);
+
+        // 覆寫測試播放，使用語言感知朗讀
         playTest.onclick = () => {
-            if (speechSynth.speaking) {
+            if (speechSynth && speechSynth.speaking) {
                 speechSynth.cancel();
             }
-
+            refreshTestPreview();
             const text = testText.value;
             const segments = splitTextByLanguage(text);
-            
             isTestPlaying = true;
             playTest.disabled = true;
             pauseTest.disabled = false;
-            
             speakSegments(segments);
         };
 
@@ -1466,11 +1513,16 @@
             el.focus();
         }
 
-        const insertZhBtn = document.getElementById('insertZhName');
-        const insertEnBtn = document.getElementById('insertEnName');
-        const tplTextarea = document.getElementById('broadcastTemplate');
-        if (insertZhBtn && tplTextarea) insertZhBtn.onclick = () => insertAtCursor(tplTextarea, '{中文名}');
-        if (insertEnBtn && tplTextarea) insertEnBtn.onclick = () => insertAtCursor(tplTextarea, '{英文名}');
+        const insertZhBtnPickup = document.getElementById('insertZhNamePickup');
+        const insertEnBtnPickup = document.getElementById('insertEnNamePickup');
+        const insertZhBtnArrived = document.getElementById('insertZhNameArrived');
+        const insertEnBtnArrived = document.getElementById('insertEnNameArrived');
+        const tplTextareaPickup = document.getElementById('broadcastTemplatePickup');
+        const tplTextareaArrived = document.getElementById('broadcastTemplateArrived');
+        if (insertZhBtnPickup && tplTextareaPickup) insertZhBtnPickup.onclick = () => insertAtCursor(tplTextareaPickup, '{中文名}');
+        if (insertEnBtnPickup && tplTextareaPickup) insertEnBtnPickup.onclick = () => insertAtCursor(tplTextareaPickup, '{英文名}');
+        if (insertZhBtnArrived && tplTextareaArrived) insertZhBtnArrived.onclick = () => insertAtCursor(tplTextareaArrived, '{中文名}');
+        if (insertEnBtnArrived && tplTextareaArrived) insertEnBtnArrived.onclick = () => insertAtCursor(tplTextareaArrived, '{英文名}');
     </script>
 </body>
 </html>
