@@ -1176,6 +1176,35 @@
             alert('刪除失敗，請稍後再試');
         });
 
+        // 監聽出發卡片更新事件（部分學生被接走）
+        socket.on('pickup_card_updated', (data) => {
+            console.log('收到出發卡片更新通知:', data);
+            const cardId = `card-${data.timestamp.replace(/[^0-9]/g, '')}`;
+            const card = document.getElementById(cardId);
+            
+            if (card) {
+                // 更新卡片內容，顯示剩餘學生
+                const messageText = card.querySelector('.message-text');
+                if (messageText && data.remaining_students && data.remaining_students.length > 0) {
+                    const studentNames = data.remaining_students.join('、');
+                    messageText.textContent = studentNames;
+                    
+                    // 添加更新動畫效果
+                    card.style.backgroundColor = '#fffacd';
+                    setTimeout(() => {
+                        card.style.backgroundColor = '';
+                    }, 1000);
+                }
+            }
+        });
+
+        // 監聽出發卡片移除事件（所有學生都被接走）
+        socket.on('pickup_card_removed', (data) => {
+            console.log('收到出發卡片移除通知:', data);
+            const cardId = `card-${data.timestamp.replace(/[^0-9]/g, '')}`;
+            removeCard(cardId);
+        });
+
         // 頭像下拉選單控制
         document.getElementById('profileImage').addEventListener('click', (e) => {
             e.stopPropagation();
