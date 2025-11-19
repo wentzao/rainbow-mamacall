@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>語音廣播系統</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+    <!-- 設置 Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">語音設置</div>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-group">
+                    <label>中文語音</label>
+                    <select id="chineseVoiceSelect"></select>
+                </div>
+                <div class="settings-group">
+                    <label>英文語音</label>
+                    <select id="englishVoiceSelect"></select>
+                </div>
+                <div class="settings-group">
+                    <label>語速調整 (<span id="rateValue">1</span>x)</label>
+                    <div class="rate-control">
+                        <input type="range" id="rateRange" min="0.5" max="2" step="0.1" value="1">
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <label>已出發模板</label>
+                    <div class="template-tokens">
+                        <button type="button" class="voice-btn" id="insertZhNamePickup">中文名</button>
+                        <button type="button" class="voice-btn" id="insertEnNamePickup">英文名</button>
+                    </div>
+                    <textarea id="broadcastTemplatePickup" placeholder="例如：{英文名} {中文名} 請準備"></textarea>
+                </div>
+                <div class="settings-group">
+                    <label>已抵達模板</label>
+                    <div class="template-tokens">
+                        <button type="button" class="voice-btn" id="insertZhNameArrived">中文名</button>
+                        <button type="button" class="voice-btn" id="insertEnNameArrived">英文名</button>
+                    </div>
+                    <textarea id="broadcastTemplateArrived" placeholder="例如：{英文名} {中文名} 家長已到達"></textarea>
+                </div>
+                <div class="voice-test">
+                    <label>語音測試</label>
+                    <div style="margin: 6px 0 10px 0;">
+                        <label><input type="radio" name="testType" value="pickup" checked> 已出發</label>
+                        <label style="margin-left: 12px;"><input type="radio" name="testType" value="arrived"> 已抵達</label>
+                    </div>
+                    <textarea id="testText" placeholder="將依模板自動產生測試內容（Austin／王士軒）" readonly></textarea>
+                    <div class="voice-controls">
+                        <button id="playTest" class="voice-btn">播放</button>
+                        <button id="pauseTest" class="voice-btn" disabled>暫停</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="save-settings">儲存設置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 導航欄 -->
+    <nav class="navbar">
+        <div class="navbar-brand">語音廣播系統</div>
+        <div class="clock" id="clock">00:00</div>
+        <div style="display: flex; align-items: center;">
+            <div class="font-size-controls">
+                <button class="font-size-btn" id="decreaseFontBtn">-</button>
+                <span class="font-size-display" id="fontSizeDisplay">16px</span>
+                <button class="font-size-btn" id="increaseFontBtn">+</button>
+            </div>
+            <div class="user-profile">
+                <img id="profileImage" class="profile-image" src="" alt="用戶頭像">
+                <div id="dropdownMenu" class="dropdown-menu">
+                    <div class="dropdown-item" id="settingsButton">設置</div>
+                    <div class="dropdown-item" id="logoutButton">登出</div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要內容區域 -->
+    <div class="main-content">
+        <!-- LINE 登入覆蓋層 -->
+        <div id="lineLoginOverlay" class="line-login-overlay">
+            <button id="lineLoginButton" class="line-login-button" style="display: none;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg" width="30" height="30" alt="LINE">
+                使用 LINE 登入
+            </button>
+        </div>
+
+        <!-- 原有的覆蓋層 -->
+        <div id="overlay" class="overlay">
+            <button id="connectButton" class="connect-button">點我開啟聲音通知</button>
+        </div>
+
+        <audio id="notificationSound" preload="auto">
+            <source src="./ding.mp3" type="audio/mpeg">
+        </audio>
+
+        <!-- 原有內容 -->
+        <div class="controls">
+            <label for="voiceSelect">選擇語音：</label>
+            <select id="voiceSelect"></select>
+        </div>
+
+        <!-- 手機版 Tab 導航列 -->
+        <div class="mobile-tab-nav" id="mobileTabNav">
+            <div class="tab-item active" data-tab="pickup">已出發</div>
+            <div class="tab-indicator"></div>
+            <div class="tab-item" data-tab="arrived">已抵達</div>
+        </div>
+
+        <!-- 新的兩欄訊息區域 -->
+        <div class="message-columns" id="messageColumns">
+            <div class="message-column" id="pickupColumn">
+                <div class="column-title">已出發</div>
+                <div class="message-list" id="pickupList">
+                    <!-- 接送（已出發）訊息卡片會動態插入這裡 -->
+                </div>
+            </div>
+            <div class="message-column" id="arrivedColumn">
+                <div class="column-title">已抵達</div>
+                <div class="message-list" id="arrivedList">
+                    <!-- 已抵達訊息卡片會動態插入這裡 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 模組 -->
+    <script src="./js/config.js"></script>
+    <script src="./js/auth.js"></script>
+    <script src="./js/speech.js"></script>
+    <script src="./js/socket.js"></script>
+    <script src="./js/ui.js"></script>
+    <script src="./js/main.js"></script>
+</body>
+</html>
